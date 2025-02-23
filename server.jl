@@ -1,9 +1,12 @@
-using Pkg
-Pkg.activate(@__DIR__)
-Pkg.instantiate()
-
 using Oxygen
 using HTTP
+
+# Get port from command line arguments or use default
+port = if length(ARGS) > 0
+    parse(Int, ARGS[1])
+else
+    8080
+end
 
 @get("/") do
     # blank rss feed
@@ -24,4 +27,4 @@ using HTTP
     """
 end
 
-serve(port=8080)
+serve(port=port)

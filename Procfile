@@ -1,1 +1,1 @@
-web: julia app.jl
+web: julia server.jl $PORT

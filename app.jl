@@ -58,14 +58,14 @@ styles = (
     )
 )
 
-card(f) = html_div(f, style=styles.card)
-card_body(f) = html_div(f, style=styles.card_body)
-panel_header(f) = html_div(f, style=styles.panel_header)
-app_container(f) = html_div(f, style=styles.app_container)
-data_grid(f) = html_div(f, style=styles.data_grid)
-plot_container(f) = html_div(f, style=styles.plot_container)
-header(f) = html_div(f, style=styles.header)
-pre(id) = html_pre(style=styles.pre, id = id)
+card(f; style=styles.card, kwargs...) = html_div(f; style=style, kwargs...)
+card_body(f; style=styles.card_body, kwargs...) = html_div(f; style=style, kwargs...)
+panel_header(f; style=styles.panel_header, kwargs...) = html_div(f; style=style, kwargs...)
+app_container(f; style=styles.app_container, kwargs...) = html_div(f; style=style, kwargs...)
+data_grid(f; style=styles.data_grid, kwargs...) = html_div(f; style=style, kwargs...)
+plot_container(f; style=styles.plot_container, kwargs...) = html_div(f; style=style, kwargs...)
+header(f; style=styles.header, kwargs...) = html_div(f; style=style, kwargs...)
+pre(id; style=styles.pre, kwargs...) = html_pre(; style=style, id=id, kwargs...)
 
 inner = 5
 n = 5 * inner
@@ -81,7 +81,7 @@ fig = plot(df, x=:x, y=:y, color=:fruit, marker_size=20, custom_data=:customdata
 app.layout = plot_container() do
     # Main header
     header() do
-        html_span("🔬 JuliaHub")
+        html_span("🔬 Dashboard")
     end,
     
     # Data grid
@@ -179,11 +179,4 @@ callback!(app,
     Output("relayout-data", "children"),
     Input("basic-interactions", "relayoutData")) do relayoutData
     return JSON3.write(relayoutData)
-end
-
-
-if length(ARGS) > 0
-    run_server(app, "0.0.0.0", parse(Int, ARGS[1]))
-else
-    run_server(app, debug=true)
 end

@@ -1,22 +1,48 @@
 using Dash
-using DataFrames
 using PlotlyJS
-using CSV
 using HTTP
 
 # Load data
-response = HTTP.get("https://plotly.github.io/datasets/country_indicators.csv")
-df = CSV.read(IOBuffer(String(response.body)), DataFrame)
+
+# CSV file format:
+# Country Name,Indicator Name,Year,Value
+# Arab World,"Agriculture, value added (% of GDP)",1962,0.760995978569
+
+let response = HTTP.get("https://plotly.github.io/datasets/country_indicators.csv")
+    buff = IOBuffer(response.body)
+    @info header = strip.(split(readline(buff), ","))
+    global df = @NamedTuple{CountryName::Vector{String}, IndicatorName::Vector{String}, Year::Vector{Int32}, Value::Vector{Union{Float32,Nothing}}}((String[], String[], Int32[], Union{Float32,Nothing}[]))
+
+    while !eof(buff)
+        line = readline(buff)
+        # parse data, accounting for missing values and quotes
+        data = strip.(split(line, r",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", keepempty=true), '\"')
+
+        push!(df.CountryName, data[1])
+        push!(df.IndicatorName, data[2])
+        push!(df.Year, parse(Int32, data[3]))
+
+        if length(data) < 4 || data[4] == ""
+            push!(df.Value, nothing)
+        else
+            push!(df.Value, parse(Float32, data[4]))
+        end
+    end
+
+    close(buff)
+end
+
+IndicatorNames = unique(df.IndicatorName)
+Years = unique(df.Year)
 
 # Initialize app
 app = dash(external_stylesheets=["https://codepen.io/chriddyp/pen/bWLwgP.css"])
 
 # Helper function for creating time series
-function create_time_series(dff, axis_type, title)
+function create_time_series(x, y, axis_type, title)
     fig = Plot(
-        dff,
-        x=:Year,
-        y=:Value,
+        x,
+        y,
         mode="lines+markers"
     )
     
@@ -48,7 +74,7 @@ app.layout = html_div() do
         html_div([
             dcc_dropdown(
                 id="crossfilter-xaxis-column",
-                options=[Dict("label" => i, "value" => i) for i in unique(df[!, "Indicator Name"])],
+                options=[Dict("label" => i, "value" => i) for i in IndicatorNames],
                 value="Fertility rate, total (births per woman)"
             ),
             dcc_radioitems(
@@ -62,7 +88,7 @@ app.layout = html_div() do
         html_div([
             dcc_dropdown(
                 id="crossfilter-yaxis-column",
-                options=[Dict("label" => i, "value" => i) for i in unique(df[!, "Indicator Name"])],
+                options=[Dict("label" => i, "value" => i) for i in IndicatorNames],
                 value="Life expectancy at birth, total (years)"
             ),
             dcc_radioitems(
@@ -89,10 +115,10 @@ app.layout = html_div() do
     html_div([
         dcc_slider(
             id="crossfilter-year--slider",
-            min=minimum(df[!, "Year"]),
-            max=maximum(df[!, "Year"]),
-            value=maximum(df[!, "Year"]),
-            marks=Dict(string(year) => string(year) for year in unique(df[!, "Year"])),
+            min=minimum(Years),
+            max=maximum(Years),
+            value=maximum(Years),
+            marks=Dict(string(year) => string(year) for year in Years),
             step=5,
             included=false,
             updatemode="drag"
@@ -105,11 +131,17 @@ end
 function render_main_plot(xaxis_column_name, yaxis_column_name,
     xaxis_type, yaxis_type, year_value)
 
-    dff = @view df[df.Year .== year_value, :]
+    # dff = @view df[df.Year .== year_value, :]
+    isYear = df.Year .== year_value
     
-    x_data = dff[dff[!, "Indicator Name"] .== xaxis_column_name, "Value"]
-    y_data = dff[dff[!, "Indicator Name"] .== yaxis_column_name, "Value"]
-    country_names = dff[dff[!, "Indicator Name"] .== yaxis_column_name, "Country Name"]
+    # x_data = dff[dff[!, "Indicator Name"] .== xaxis_column_name, "Value"]
+    x_data = df.Value[isYear .& (df.IndicatorName .== xaxis_column_name)]
+
+    # y_data = dff[dff[!, "Indicator Name"] .== yaxis_column_name, "Value"]
+    y_data = df.Value[isYear .& (df.IndicatorName .== yaxis_column_name)]
+
+    # country_names = dff[dff[!, "Indicator Name"] .== yaxis_column_name, "Country Name"]
+    country_names = df.CountryName[isYear .& (df.IndicatorName .== yaxis_column_name)]
 
     fig = Plot(
         scatter(;
@@ -144,9 +176,12 @@ callback!(render_main_plot, app,
 
 function render_time_series(hoverData, axis_column_name, axis_type)
     country_name = hoverData["points"][1]["customdata"]
-    dff = @view df[(df[!, "Country Name"] .== country_name) .& (df[!, "Indicator Name"] .== axis_column_name), :]
+    # dff = @view df[(df[!, "Country Name"] .== country_name) .& (df[!, "Indicator Name"] .== axis_column_name), :]
+
+    includeRow = (df.CountryName .== country_name) .& (df.IndicatorName .== axis_column_name)
+
     title = "<b>$country_name</b><br>$axis_column_name"
-    return create_time_series(dff, axis_type, title)
+    return create_time_series(df.Year[includeRow], df.Value[includeRow], axis_type, title)
 end
 
 # Update x-axis time series

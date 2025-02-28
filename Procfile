@@ -1,1 +1,1 @@
-web: julia --heap-size-hint=32M --project=. server.jl $PORT
+web: julia --threads=auto --heap-size-hint=32M --project=. server.jl $PORT

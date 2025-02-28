@@ -1,182 +1,164 @@
-using JSON3
 using Dash
 using DataFrames
 using PlotlyJS
+using CSV
+using HTTP
 
-app = dash(external_stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"])
+# Load data
+response = HTTP.get("https://plotly.github.io/datasets/country_indicators.csv")
+df = CSV.read(IOBuffer(String(response.body)), DataFrame)
 
-# CSS styles
-styles = (
-    pre = Dict(
-        "border" => "thin lightgrey solid",
-        "overflowX" => "hidden",
-        "white-space" => "pre-wrap",
-        "word-wrap" => "break-word",
-        "text-overflow" => "ellipsis",
-        "max-width" => "100%"
-    ),
-    header = Dict(
-        "backgroundColor" => "#4CAF50",
-        "color" => "white",
-        "padding" => "10px 15px",
-        "marginBottom" => "20px",
-        "borderRadius" => "0",
-        "fontWeight" => "bold",
-        "fontSize" => "18px",
-        "display" => "flex",
-        "alignItems" => "center"
-    ),
-    app_container = Dict(
-        "maxWidth" => "100%",
-        "margin" => "0",
-        "padding" => "0"
-    ),
-    plot_container = Dict(
-        "width" => "100%",
-        "marginBottom" => "20px"
-    ),
-    data_grid = Dict(
-        "display" => "grid",
-        "gridTemplateColumns" => "1fr 1fr",
-        "gridGap" => "15px"
-    ),
-    card = Dict(
-        "border" => "1px solid #ddd",
-        "borderRadius" => "5px",
-        "backgroundColor" => "#f9f9f9",
-        "marginBottom" => "15px",
-        "boxShadow" => "0 2px 4px rgba(0,0,0,0.1)"
-    ),
-    card_body = Dict(
-        "padding" => "15px"
-    ),
-    panel_header = Dict(
-        "backgroundColor" => "#f0f0f0",
-        "padding" => "10px 15px",
-        "borderBottom" => "1px solid #ddd",
-        "fontWeight" => "bold"
+# Initialize app
+app = dash(external_stylesheets=["https://codepen.io/chriddyp/pen/bWLwgP.css"])
+
+# Helper function for creating time series
+function create_time_series(dff, axis_type, title)
+    fig = Plot(
+        dff,
+        x=:Year,
+        y=:Value,
+        mode="lines+markers"
     )
-)
-
-card(f; style=styles.card, kwargs...) = html_div(f; style=style, kwargs...)
-card_body(f; style=styles.card_body, kwargs...) = html_div(f; style=style, kwargs...)
-panel_header(f; style=styles.panel_header, kwargs...) = html_div(f; style=style, kwargs...)
-app_container(f; style=styles.app_container, kwargs...) = html_div(f; style=style, kwargs...)
-data_grid(f; style=styles.data_grid, kwargs...) = html_div(f; style=style, kwargs...)
-plot_container(f; style=styles.plot_container, kwargs...) = html_div(f; style=style, kwargs...)
-header(f; style=styles.header, kwargs...) = html_div(f; style=style, kwargs...)
-pre(id; style=styles.pre, kwargs...) = html_pre(; style=style, id=id, kwargs...)
-
-inner = 5
-n = 5 * inner
-df = DataFrame(
-    "x" => rand(1:0.1:5, n),
-    "y" => rand(1:0.1:5, n),
-    "customdata" => 1:n,
-    "fruit" => repeat(["apple", "orange", "banana", "grape", "pear"], inner=inner)
-)
-
-fig = plot(df, x=:x, y=:y, color=:fruit, marker_size=20, custom_data=:customdata, mode="markers")
-
-app.layout = plot_container() do
-    # Main header
-    header() do
-        html_span("🔬 Dashboard")
-    end,
     
-    # Data grid
-    data_grid() do
-        # Plot card
-        card() do
-            panel_header("Temperature Data"),
-            card_body() do
-                dcc_graph(
-                    id="basic-interactions",
-                    figure=fig
-                )
-            end
-        end,
-
-        # test card
-        card() do
-            panel_header("test"),
-            card_body() do
-                dcc_markdown("""
-                    Click and drag on the graph to zoom or click on the zoom
-                    buttons in the graph's menu bar.
-                """),
-                pre("test-data")
-            end
-        end,
-
-        # First card
-        card() do
-            panel_header("Hover Data"),
-            card_body() do
-                dcc_markdown("""
-                    Mouse over values in the graph.
-                """),
-                pre("hover-data")
-            end
-        end,
-
-        # Second card
-        card() do
-            panel_header("Click Data"),
-            card_body() do
-                dcc_markdown("""
-                    Click on points in the graph.
-                """),
-                pre("click-data")
-            end
-        end,
-        
-        # Fourth card
-        card() do
-            panel_header("Zoom and Relayout Data"),
-            card_body() do
-                dcc_markdown("""
-                    Click and drag on the graph to zoom or click on the zoom
-                    buttons in the graph's menu bar.
-                """),
-                pre("relayout-data")
-            end
-        end,
-
-        # Third card
-        card() do
-            panel_header("Selection Data"),
-            card_body() do
-                dcc_markdown("""
-                    Choose the lasso or rectangle tool in the graph's menu
-                    bar and then select points in the graph.
-                """),
-                pre("selected-data")
-            end
-        end
-    end
+    relayout!(fig, 
+        height=225,
+        margin=Dict(:l => 20, :b => 30, :r => 10, :t => 10),
+        xaxis=Dict(:showgrid => false),
+        yaxis=Dict(:type => axis_type == "Linear" ? "linear" : "log"),
+        annotations=[
+            Dict(
+                :x => 0,
+                :y => 0.85,
+                :xanchor => "left",
+                :yanchor => "bottom",
+                :xref => "paper",
+                :yref => "paper",
+                :showarrow => false,
+                :align => "left",
+                :text => title
+            )
+        ]
+    )
+    return fig
 end
 
-callback!(app,
-    Output("hover-data", "children"),
-    Input("basic-interactions", "hoverData")) do hoverData
-    return JSON3.write(hoverData)
+# Layout
+app.layout = html_div() do
+    html_div([
+        html_div([
+            dcc_dropdown(
+                id="crossfilter-xaxis-column",
+                options=[Dict("label" => i, "value" => i) for i in unique(df[!, "Indicator Name"])],
+                value="Fertility rate, total (births per woman)"
+            ),
+            dcc_radioitems(
+                id="crossfilter-xaxis-type",
+                options=[Dict("label" => i, "value" => i) for i in ["Linear", "Log"]],
+                value="Linear",
+                style=Dict("display" => "inline-block", "marginTop" => "5px")
+            )
+        ], style=Dict("width" => "49%", "display" => "inline-block")),
+
+        html_div([
+            dcc_dropdown(
+                id="crossfilter-yaxis-column",
+                options=[Dict("label" => i, "value" => i) for i in unique(df[!, "Indicator Name"])],
+                value="Life expectancy at birth, total (years)"
+            ),
+            dcc_radioitems(
+                id="crossfilter-yaxis-type",
+                options=[Dict("label" => i, "value" => i) for i in ["Linear", "Log"]],
+                value="Linear",
+                style=Dict("display" => "inline-block", "marginTop" => "5px")
+            )
+        ], style=Dict("width" => "49%", "float" => "right", "display" => "inline-block"))
+    ], style=Dict("padding" => "10px 5px")),
+
+    html_div([
+        dcc_graph(
+            id="crossfilter-indicator-scatter",
+            hoverData=Dict("points" => [Dict("customdata" => "Japan")])
+        )
+    ], style=Dict("width" => "49%", "display" => "inline-block", "padding" => "0 20")),
+
+    html_div([
+        dcc_graph(id="x-time-series"),
+        dcc_graph(id="y-time-series"),
+    ], style=Dict("display" => "inline-block", "width" => "49%")),
+
+    html_div([
+        dcc_slider(
+            id="crossfilter-year--slider",
+            min=minimum(df[!, "Year"]),
+            max=maximum(df[!, "Year"]),
+            value=maximum(df[!, "Year"]),
+            marks=Dict(string(year) => string(year) for year in unique(df[!, "Year"])),
+            step=5,
+            included=false,
+            updatemode="drag"
+        )
+    ], style=Dict("width" => "49%", "padding" => "0px 20px 20px 20px"))
 end
 
-callback!(app,
-    Output("click-data", "children"),
-    Input("basic-interactions", "clickData")) do clickData
-    return JSON3.write(clickData)
+# Callbacks
+
+function render_main_plot(xaxis_column_name, yaxis_column_name,
+    xaxis_type, yaxis_type, year_value)
+
+    dff = @view df[df.Year .== year_value, :]
+    
+    x_data = dff[dff[!, "Indicator Name"] .== xaxis_column_name, "Value"]
+    y_data = dff[dff[!, "Indicator Name"] .== yaxis_column_name, "Value"]
+    country_names = dff[dff[!, "Indicator Name"] .== yaxis_column_name, "Country Name"]
+
+    fig = Plot(
+        scatter(;
+            x=x_data,
+            y=y_data,
+            mode="markers",
+            hovertext=country_names,
+            customdata=country_names
+        )
+    )
+    
+    relayout!(fig,
+        xaxis_title=xaxis_column_name,
+        yaxis_title=yaxis_column_name,
+        xaxis_type=xaxis_type == "Linear" ? "linear" : "log",
+        yaxis_type=yaxis_type == "Linear" ? "linear" : "log",
+        margin=Dict(:l => 40, :b => 40, :t => 10, :r => 0),
+        hovermode="closest"
+    )
+    
+    return fig
 end
 
-callback!(app,
-    Output("selected-data", "children"),
-    Input("basic-interactions", "selectedData")) do selectedData
-    return JSON3.write(selectedData)
+# Update main scatter plot
+callback!(render_main_plot, app,
+    Output("crossfilter-indicator-scatter", "figure"),
+    Input("crossfilter-xaxis-column", "value"),
+    Input("crossfilter-yaxis-column", "value"),
+    Input("crossfilter-xaxis-type", "value"),
+    Input("crossfilter-yaxis-type", "value"),
+    Input("crossfilter-year--slider", "value"))
+
+function render_time_series(hoverData, axis_column_name, axis_type)
+    country_name = hoverData["points"][1]["customdata"]
+    dff = @view df[(df[!, "Country Name"] .== country_name) .& (df[!, "Indicator Name"] .== axis_column_name), :]
+    title = "<b>$country_name</b><br>$axis_column_name"
+    return create_time_series(dff, axis_type, title)
 end
 
-callback!(app,
-    Output("relayout-data", "children"),
-    Input("basic-interactions", "relayoutData")) do relayoutData
-    return JSON3.write(relayoutData)
-end
+# Update x-axis time series
+callback!(render_time_series, app,
+    Output("x-time-series", "figure"),                      # Output: Time series plot for x-axis variable
+    Input("crossfilter-indicator-scatter", "hoverData"),    # Input: Hover data containing selected country
+    Input("crossfilter-xaxis-column", "value"),             # Input: Selected x-axis indicator
+    Input("crossfilter-xaxis-type", "value"))               # Input: Linear/Log scale for x-axis
+
+# Update y-axis time series
+callback!(render_time_series, app,
+    Output("y-time-series", "figure"),                      # Output: Time series plot for y-axis variable
+    Input("crossfilter-indicator-scatter", "hoverData"),    # Input: Hover data containing selected country  
+    Input("crossfilter-yaxis-column", "value"),             # Input: Selected y-axis indicator
+    Input("crossfilter-yaxis-type", "value"))               # Input: Linear/Log scale for y-axis

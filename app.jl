@@ -1,5 +1,5 @@
 using Dash
-using PlotlyJS
+using PlotlyBase
 using HTTP
 
 # Load data

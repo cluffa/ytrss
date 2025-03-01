@@ -16,7 +16,7 @@ let response = HTTP.get("https://plotly.github.io/datasets/country_indicators.cs
     while !eof(buff)
         line = readline(buff)
         # parse data, accounting for missing values and quotes
-        data = strip.(split(line, r",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", keepempty=true), '\"')
+        data = strip.(strip.(split(line, r",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", keepempty=true)), '\"')
 
         push!(df.CountryName, data[1])
         push!(df.IndicatorName, data[2])
